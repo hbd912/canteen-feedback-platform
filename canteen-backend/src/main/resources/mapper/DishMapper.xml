@@ -1,0 +1,206 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.qmz.canteen.mapper.DishMapper">
+
+    <sql id="statColumns">
+        d.id, d.stall_id, d.name, d.price, d.category, d.image, d.description, d.featured, d.status,
+        d.audit_status, d.audit_remark, d.audit_by, d.audit_time,
+        d.stock_qty, d.sold_out, d.create_time,
+        s.name AS stall_name,
+        s.window_no AS window_no,
+        IFNULL(ROUND(AVG(r.rating), 2), 0) AS avg_rating,
+        COUNT(DISTINCT r.id) AS review_count,
+        IFNULL(ROUND(SUM(CASE WHEN r.rating &gt;= #{goodThreshold} THEN 1 ELSE 0 END)
+               / NULLIF(COUNT(DISTINCT r.id), 0) * 100, 2), 0) AS good_rate,
+        (SELECT IFNULL(SUM(ds.quantity), 0) FROM dish_sales ds WHERE ds.dish_id = d.id) AS sales_count,
+        EXISTS(SELECT 1 FROM dish_ad ad WHERE ad.dish_id = d.id AND ad.deleted = 0
+               AND ad.status = 'ACTIVE'
+               AND (ad.start_time IS NULL OR ad.start_time &lt;= NOW())
+               AND (ad.end_time IS NULL OR ad.end_time &gt;= NOW())) AS is_ad,
+        (SELECT ad2.id FROM dish_ad ad2 WHERE ad2.dish_id = d.id AND ad2.deleted = 0
+               AND ad2.status = 'ACTIVE'
+               AND (ad2.start_time IS NULL OR ad2.start_time &lt;= NOW())
+               AND (ad2.end_time IS NULL OR ad2.end_time &gt;= NOW())
+               ORDER BY ad2.id DESC LIMIT 1) AS ad_id
+    </sql>
+
+    <sql id="groupByDish">
+        GROUP BY d.id, d.stall_id, d.name, d.price, d.category, d.image, d.description, d.featured, d.status,
+                 d.audit_status, d.audit_remark, d.audit_by, d.audit_time,
+                 d.stock_qty, d.sold_out,
+                 d.create_time, s.name, s.window_no
+    </sql>
+
+    <sql id="dishWhere">
+        WHERE d.deleted = 0
+        <if test="query.keyword != null and query.keyword != ''">
+            AND (d.name LIKE CONCAT('%', #{query.keyword}, '%')
+                 OR d.description LIKE CONCAT('%', #{query.keyword}, '%')
+                 OR s.name LIKE CONCAT('%', #{query.keyword}, '%'))
+        </if>
+        <if test="query.stallId != null">
+            AND d.stall_id = #{query.stallId}
+        </if>
+        <if test="query.area != null and query.area != ''">
+            AND s.area = #{query.area}
+        </if>
+        <if test="query.floor != null">
+            AND s.floor = #{query.floor}
+        </if>
+        <if test="query.category != null and query.category != ''">
+            AND d.category = #{query.category}
+        </if>
+        <if test="query.minPrice != null">
+            AND d.price &gt;= #{query.minPrice}
+        </if>
+        <if test="query.maxPrice != null">
+            AND d.price &lt;= #{query.maxPrice}
+        </if>
+    </sql>
+
+    <select id="selectDishPage" resultType="com.qmz.canteen.vo.DishVO">
+        SELECT
+        <include refid="statColumns"/>,
+        <choose>
+            <when test="userId != null">
+                EXISTS(SELECT 1 FROM dish_favorite f WHERE f.dish_id = d.id AND f.user_id = #{userId}) AS favorited
+            </when>
+            <otherwise>
+                0 AS favorited
+            </otherwise>
+        </choose>
+        FROM dish d
+        LEFT JOIN canteen_stall s ON d.stall_id = s.id AND s.deleted = 0
+        LEFT JOIN dish_review r ON r.dish_id = d.id AND r.deleted = 0 AND r.status = 1
+        <include refid="dishWhere"/>
+        <if test="query.includeOffShelf == null or query.includeOffShelf == false">
+            AND d.status = 1
+        </if>
+        <if test="query.includeOffShelf == true and query.status != null">
+            AND d.status = #{query.status}
+        </if>
+        <if test="query.auditStatus != null and query.auditStatus != ''">
+            AND d.audit_status = #{query.auditStatus}
+        </if>
+        <include refid="groupByDish"/>
+        <if test="query.minRating != null">
+            HAVING avg_rating &gt;= #{query.minRating}
+        </if>
+        ORDER BY ${orderSql}
+    </select>
+
+    <select id="selectDishDetail" resultType="com.qmz.canteen.vo.DishVO">
+        SELECT
+        <include refid="statColumns"/>,
+        <choose>
+            <when test="userId != null">
+                EXISTS(SELECT 1 FROM dish_favorite f WHERE f.dish_id = d.id AND f.user_id = #{userId}) AS favorited
+            </when>
+            <otherwise>
+                0 AS favorited
+            </otherwise>
+        </choose>
+        FROM dish d
+        LEFT JOIN canteen_stall s ON d.stall_id = s.id AND s.deleted = 0
+        LEFT JOIN dish_review r ON r.dish_id = d.id AND r.deleted = 0 AND r.status = 1
+        WHERE d.id = #{dishId} AND d.deleted = 0
+        <include refid="groupByDish"/>
+    </select>
+
+    <select id="selectFavoriteDishes" resultType="com.qmz.canteen.vo.DishVO">
+        SELECT
+        <include refid="statColumns"/>,
+        1 AS favorited
+        FROM dish d
+        LEFT JOIN canteen_stall s ON d.stall_id = s.id AND s.deleted = 0
+        LEFT JOIN dish_review r ON r.dish_id = d.id AND r.deleted = 0 AND r.status = 1
+        WHERE d.deleted = 0
+          AND EXISTS(SELECT 1 FROM dish_favorite f WHERE f.dish_id = d.id AND f.user_id = #{userId})
+        <include refid="groupByDish"/>
+        ORDER BY avg_rating DESC, review_count DESC
+    </select>
+
+    <select id="selectRecommendDishes" resultType="com.qmz.canteen.vo.DishVO">
+        SELECT
+        d.id, d.stall_id, d.name, d.price, d.category, d.image, d.description, d.featured, d.status,
+        d.stock_qty, d.sold_out, d.create_time,
+        s.name AS stall_name,
+        s.window_no AS window_no,
+        IFNULL(ROUND(AVG(r.rating), 2), 0) AS avg_rating,
+        COUNT(DISTINCT r.id) AS review_count,
+        IFNULL(ROUND(SUM(CASE WHEN r.rating &gt;= #{goodThreshold} THEN 1 ELSE 0 END)
+               / NULLIF(COUNT(DISTINCT r.id), 0) * 100, 2), 0) AS good_rate,
+        (SELECT IFNULL(SUM(ds.quantity), 0) FROM dish_sales ds WHERE ds.dish_id = d.id) AS sales_count,
+        EXISTS(SELECT 1 FROM dish_ad ad WHERE ad.dish_id = d.id AND ad.deleted = 0
+               AND ad.status = 'ACTIVE'
+               AND (ad.start_time IS NULL OR ad.start_time &lt;= NOW())
+               AND (ad.end_time IS NULL OR ad.end_time &gt;= NOW())) AS is_ad,
+        (SELECT ad2.id FROM dish_ad ad2 WHERE ad2.dish_id = d.id AND ad2.deleted = 0
+               AND ad2.status = 'ACTIVE'
+               AND (ad2.start_time IS NULL OR ad2.start_time &lt;= NOW())
+               AND (ad2.end_time IS NULL OR ad2.end_time &gt;= NOW())
+               ORDER BY ad2.id DESC LIMIT 1) AS ad_id,
+        0 AS favorited
+        FROM dish d
+        LEFT JOIN canteen_stall s ON d.stall_id = s.id AND s.deleted = 0
+        LEFT JOIN dish_review r ON r.dish_id = d.id AND r.deleted = 0 AND r.status = 1
+        WHERE d.deleted = 0 AND d.status = 1 AND d.id &lt;&gt; #{dishId}
+        <include refid="groupByDish"/>
+        ORDER BY avg_rating DESC, review_count DESC
+        LIMIT #{limit}
+    </select>
+
+    <select id="selectSignatureDishes" resultType="com.qmz.canteen.vo.DishVO">
+        SELECT
+        <include refid="statColumns"/>,
+        0 AS favorited
+        FROM dish d
+        LEFT JOIN canteen_stall s ON d.stall_id = s.id AND s.deleted = 0
+        LEFT JOIN dish_review r ON r.dish_id = d.id AND r.deleted = 0 AND r.status = 1
+        WHERE d.deleted = 0 AND d.status = 1 AND d.stall_id = #{stallId}
+        <include refid="groupByDish"/>
+        ORDER BY d.featured DESC, avg_rating DESC, review_count DESC
+        LIMIT #{limit}
+    </select>
+
+    <!-- 某档口评分最高的若干菜品（美食探索档口排序页，右侧展示用） -->
+    <select id="selectTopRatedDishes" resultType="com.qmz.canteen.vo.DishVO">
+        SELECT
+        <include refid="statColumns"/>,
+        0 AS favorited
+        FROM dish d
+        LEFT JOIN canteen_stall s ON d.stall_id = s.id AND s.deleted = 0
+        LEFT JOIN dish_review r ON r.dish_id = d.id AND r.deleted = 0 AND r.status = 1
+        WHERE d.deleted = 0 AND d.status = 1 AND d.stall_id = #{stallId}
+        <include refid="groupByDish"/>
+        ORDER BY avg_rating DESC, review_count DESC, d.featured DESC, d.id ASC
+        LIMIT #{limit}
+    </select>
+
+    <!-- 管理员菜品审核列表：按最近更新时间倒序，联表带出档口名 -->
+    <select id="selectAuditPage" resultType="com.qmz.canteen.vo.DishAuditVO">
+        SELECT d.id,
+               d.stall_id,
+               d.name,
+               d.price,
+               d.category,
+               d.image,
+               d.description,
+               d.status,
+               d.audit_status,
+               d.audit_remark,
+               d.audit_by,
+               d.audit_time,
+               d.create_time,
+               d.update_time,
+               s.name AS stall_name
+        FROM dish d
+        LEFT JOIN canteen_stall s ON s.id = d.stall_id AND s.deleted = 0
+        WHERE d.deleted = 0
+        <if test="status != null and status != ''">
+            AND d.audit_status = #{status}
+        </if>
+        ORDER BY d.update_time DESC, d.id DESC
+    </select>
+
+</mapper>

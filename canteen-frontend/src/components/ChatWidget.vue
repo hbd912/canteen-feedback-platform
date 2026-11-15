@@ -1,0 +1,1442 @@
+<template>
+  <div class="chat-widget">
+    <transition name="chat-pop">
+      <div
+        v-if="open"
+        class="chat-panel"
+        :class="{ 'panel-docked': docked, 'panel-dragging': isDragging }"
+        :style="panelStyle"
+      >
+        <div class="chat-head" @pointerdown="onHeadDown">
+          <div class="head-avatar">
+            <img :src="avatarByState" class="head-avatar-img" alt="助手">
+          </div>
+          <div class="head-text">
+            <div class="head-title">{{ assistantTitle }}</div>
+            <div class="head-sub">{{ engineLabel }}</div>
+          </div>
+          <div class="head-actions">
+            <button class="head-btn" title="历史会话" @click.stop="openHistory">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                <path d="M3 3v5h5"/>
+                <path d="M12 7v5l4 2"/>
+              </svg>
+            </button>
+            <button class="head-btn" title="新建会话" @click.stop="newSession">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+                <path d="M12 8v6M9 11h6"/>
+              </svg>
+            </button>
+            <button
+              class="head-btn"
+              :class="{ 'head-btn-on': docked }"
+              :title="docked ? '取消固定侧栏' : '固定到右侧'"
+              @click.stop="toggleDock"
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="4" width="18" height="16" rx="4"/>
+                <path d="M15 4v16"/>
+                <path d="M15 4h2a4 4 0 0 1 4 4v8a4 4 0 0 1-4 4h-2z" fill="currentColor" stroke="none" opacity=".18"/>
+              </svg>
+            </button>
+            <button class="head-btn head-close" title="关闭" @click.stop="closePanel">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <path d="M6 6l12 12M18 6L6 18"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div ref="bodyEl" class="chat-body">
+          <div v-if="!messages.length" class="chat-welcome">
+            <div class="welcome-icon">
+              <img :src="avatarByState" class="welcome-icon-img" alt="助手">
+            </div>
+            <p class="welcome-title">{{ welcomeTitle }}</p>
+            <p class="welcome-sub">{{ welcomeSub }}</p>
+
+            <div class="suggest-head">
+              <span class="suggest-label">推荐提问</span>
+              <button class="refresh-btn" :disabled="!suggestions.length" @click="refreshSuggestions">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 12a9 9 0 0 0-15.5-6.3L3 8"/>
+                  <path d="M3 3v5h5"/>
+                  <path d="M3 12a9 9 0 0 0 15.5 6.3L21 16"/>
+                  <path d="M21 21v-5h-5"/>
+                </svg>
+                换一批
+              </button>
+            </div>
+            <div class="suggestion-list">
+              <button
+                v-for="s in visibleSuggestions"
+                :key="s"
+                class="suggestion-item"
+                @click="send(s)"
+              >
+                <span class="suggestion-text">{{ s }}</span>
+              </button>
+            </div>
+          </div>
+
+          <div v-for="(m, i) in messages" :key="i" class="msg" :class="m.role">
+            <template v-if="m.role === 'user'">
+              <span class="user-text">{{ m.text }}</span>
+            </template>
+            <template v-else>
+              <!-- 流式中：先显示已到达的文字 + 光标，等 done 再渲染卡片 -->
+              <div v-if="m.streaming" class="bubble streaming-bubble">
+                <p class="streaming-text">{{ m.answer.text }}<span class="caret"></span></p>
+              </div>
+              <AnswerBubble v-else :answer="m.answer" @ask="send" />
+            </template>
+          </div>
+
+          <div v-if="loading" class="msg bot">
+            <span class="typing"><i></i><i></i><i></i></span>
+            <span class="typing-hint">{{ thinkingText }}</span>
+          </div>
+        </div>
+
+        <div class="chat-input">
+          <input
+            v-model="draft"
+            class="chat-input-field"
+            :placeholder="inputPlaceholder"
+            maxlength="200"
+            @focus="onInputFocus"
+            @blur="onInputBlur"
+            @keyup.enter="send(draft)"
+          >
+          <button class="send-btn" :disabled="loading" title="发送" aria-label="发送" @click="send(draft)">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 19V5"/>
+              <path d="M6 11l6-6 6 6"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="chat-quick">
+          <button
+            v-for="q in quickActions.filter(item => !item.danger)"
+            :key="q.label"
+            class="quick-btn"
+            :disabled="loading"
+            @click="onQuick(q)"
+          >{{ q.label }}</button>
+        </div>
+
+        <!-- 历史会话侧栏：从左滑出，可点选恢复、删除 -->
+        <transition name="history-slide">
+          <div v-if="historyOpen" class="history-mask" @click.self="historyOpen = false">
+            <div class="history-side">
+              <div class="history-head">
+                <span class="history-title">历史会话</span>
+                <button class="head-btn" title="关闭" @click.stop="historyOpen = false">
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                    <path d="M6 6l12 12M18 6L6 18"/>
+                  </svg>
+                </button>
+              </div>
+              <div class="history-list">
+                <div v-if="!sessions.length && !sessionsLoading" class="history-empty">
+                  还没有历史会话，聊过的内容会自动保存到这里。
+                </div>
+                <div v-if="sessionsLoading" class="history-empty">加载中…</div>
+                <div
+                  v-for="s in sessions"
+                  :key="s.id"
+                  class="history-item"
+                  :class="{ active: s.id === sessionId }"
+                  @click="loadSession(s.id)"
+                >
+                  <div class="history-item-text">{{ s.title || '新的对话' }}</div>
+                  <div class="history-item-meta">
+                    {{ formatTime(s.updateTime || s.createTime) }} · {{ s.messageCount || 0 }} 条
+                  </div>
+                  <button class="history-del" title="删除会话" @click.stop="removeSession(s.id)">
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                      <path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <div class="history-foot">
+                <button class="quick-btn" @click="newSession">＋ 开始新对话</button>
+              </div>
+            </div>
+          </div>
+        </transition>
+      </div>
+    </transition>
+
+    <button
+      v-if="!open"
+      class="chat-fab"
+      :style="fabStyle"
+      :title="`打开${assistantTitle}`"
+      @mouseenter="onFabHover"
+      @mouseleave="onFabLeave"
+      @pointerdown="onFabDown"
+    >
+      <img :src="avatarByState" class="fab-img" alt="助手" draggable="false">
+    </button>
+  </div>
+</template>
+
+<script setup>
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import AnswerBubble from '@/components/chat/AnswerBubble.vue'
+import {
+  askChat, askChatStream, getChatEngine, getChatSuggestions,
+  getChatSessions, getChatSessionMessages, deleteChatSession
+} from '@/api/chat'
+import { useUserStore } from '@/store/user'
+import { useCartStore } from '@/store/cart'
+
+const EDGE = 12
+/** 面板尺寸：默认高窄窗口，与之前保持一致 */
+const PANEL_W = 560
+/** 每页推荐问题数 */
+const SUGGESTION_PAGE = 4
+
+const userStore = useUserStore()
+const cartStore = useCartStore()
+
+/** 本次回答是否发生了加购（后端会在动作里给出 /cart 入口），用于自动弹出购物车 */
+function hasCartAction(answer) {
+  return (answer?.actions || []).some(a => a && a.path === '/cart')
+}
+const isMerchant = computed(() => userStore.isMerchant)
+
+const open = ref(false)
+const docked = ref(localStorage.getItem('canteen_chat_docked') === '1')
+const draft = ref('')
+const loading = ref(false)
+const messages = ref([])
+const suggestions = ref([])
+const suggestionOffset = ref(0)
+const bodyEl = ref(null)
+const isDragging = ref(false)
+/** 当前小助手会话（后端持久化）；null = 尚未产生（首轮问答后自动创建/复用） */
+const sessionId = ref(null)
+/** 历史会话侧栏 */
+const historyOpen = ref(false)
+const sessions = ref([])
+const sessionsLoading = ref(false)
+/** 当前推理引擎，仅用于头部文案 */
+const engine = ref('agent')
+const engineLabel = computed(() => (engine.value === 'agent'
+  ? '智能助手 · 实时查库，随问随答'
+  : '本地助手 · 菜品 · 档口 · 规则'))
+
+const assistantTitle = computed(() => (isMerchant.value ? '商家经营助手' : '食堂小助手'))
+const welcomeTitle = computed(() => (isMerchant.value ? '经营遇到问题？问我吧' : '你好，想问点什么？'))
+const welcomeSub = computed(() => (isMerchant.value
+  ? '菜品管理、订单处理、销售数据、账号绑定都可以问'
+  : '可以直接输入菜名，比如「宫保鸡丁」'))
+const inputPlaceholder = computed(() => (isMerchant.value
+  ? '输入经营问题，比如「菜品在哪里添加」'
+  : '输入菜名或问题…'))
+
+/** 助手机器人表情：空闲 happy / 悬停 wink / 点击 surprise / 输入 doubt / 思考 think / 回答 wave(交替) / 异常 speechless */
+const assistantMood = ref('happy')
+const waveFlip = ref(false)
+const avatarByState = computed(() => {
+  const map = {
+    happy: '/ui/assistant/happy.png',
+    wink: '/ui/assistant/wink.png',
+    surprise: '/ui/assistant/surprise.png',
+    doubt: '/ui/assistant/doubt.png',
+    think: '/ui/assistant/think.png',
+    wave: '/ui/assistant/wave1.png',
+    wave2: '/ui/assistant/wave2.png',
+    speechless: '/ui/assistant/speechless.png'
+  }
+  return map[assistantMood.value] || map.happy
+})
+
+/* ---------------- 表情交互 ---------------- */
+function onFabHover() { if (!open.value) assistantMood.value = 'wink' }
+function onFabLeave() { if (!open.value) assistantMood.value = 'happy' }
+function onFabDown(e) {
+  assistantMood.value = 'surprise'
+  if (e.button !== undefined && e.button !== 0) return
+  // 阻止浏览器原生拖拽（img 默认可拖拽，会抢走 pointermove 导致拖不动/松手粘连）
+  e.preventDefault()
+  const el = e.currentTarget
+  // 悬浮球可拖动：记录起点，移动超过阈值视为拖动，否则视为点击打开面板
+  const rect = el.getBoundingClientRect()
+  if (fabPos.left == null) {
+    fabPos.left = rect.left
+    fabPos.top = rect.top
+  }
+  fabDrag = { sx: e.clientX, sy: e.clientY, ox: fabPos.left, oy: fabPos.top, moved: false }
+  // 指针捕获：即使鼠标移出元素/窗口，pointermove、pointerup 仍然派发到该元素，
+  // 避免「松手后还粘着鼠标」以及移出窗口丢失 pointerup。
+  try {
+    el.setPointerCapture?.(e.pointerId)
+  } catch { /* 老浏览器忽略 */ }
+  window.addEventListener('pointermove', onFabDrag)
+  window.addEventListener('pointerup', onFabUp)
+  window.addEventListener('pointercancel', onFabUp)
+}
+function onInputFocus() { if (!loading.value && assistantMood.value === 'happy') assistantMood.value = 'doubt' }
+function onInputBlur() { if (assistantMood.value === 'doubt') assistantMood.value = 'happy' }
+
+const STUDENT_SUGGESTIONS = ['今天有什么推荐', '哪些菜要避雷', '怎么投诉某个窗口', '食堂几点营业']
+const MERCHANT_SUGGESTIONS = ['菜品在哪里添加', '学生下单后怎么处理', '怎么查看销售数据', '怎么绑定邮箱', '怎么给管理员留言']
+
+/** 底部快捷功能按钮：点击即发送对应指令，走智能体实时查库，不死板 */
+const quickActions = computed(() => {
+  if (isMerchant.value) {
+    return [
+      { label: '待办订单', emoji: '📋', text: '今天有哪些待处理订单', danger: false },
+      { label: '销售数据', emoji: '📈', text: '帮我看看最近的销售情况', danger: false },
+      { label: '推荐菜品', emoji: '🥘', text: '今天有什么好吃的推荐', danger: false },
+      { label: '清空对话', emoji: '🧹', text: '', danger: true }
+    ]
+  }
+  const base = [
+    { label: '查订单', emoji: '📄', text: '帮我查一下我的订单', danger: false },
+    { label: '消费总结', emoji: '📊', text: '总结一下我这个星期和这个月的消费', danger: false },
+    { label: '口味偏好', emoji: '🧡', text: '你知道我喜欢吃什么吗，给我推荐几个', danger: false },
+    { label: '推荐菜品', emoji: '🥘', text: '今天有什么好吃的推荐', danger: false }
+  ]
+  return [...base, { label: '清空对话', emoji: '🧹', text: '', danger: true }]
+})
+
+function onQuick(q) {
+  if (q.danger) {
+    newSession()
+    return
+  }
+  send(q.text)
+}
+
+const visibleSuggestions = computed(() => {
+  const list = suggestions.value
+  if (!list.length) return []
+  const count = Math.min(SUGGESTION_PAGE, list.length)
+  return Array.from({ length: count }, (_, i) => list[(suggestionOffset.value + i) % list.length])
+})
+
+const vp = reactive({ w: 1280, h: 800 })
+const panelPos = reactive({ x: 0, y: 0 })
+/** 悬浮球位置（left/top），null 表示默认右下角 */
+const fabPos = reactive({ left: null, top: null })
+const FAB_SIZE = 62
+let fabDrag = null
+
+/**
+ * 等待时的趣味提示语。
+ * 不暴露「正在查询数据库」这类实现细节，用拟人化的说法更亲切。
+ */
+const THINKING_WORDS = [
+  '让我想想…',
+  '正在翻食堂的小本本…',
+  '努力查询中…',
+  '琢磨一下你的问题…',
+  '去后厨打听打听…',
+  '马上就好…',
+  '认真思考中…'
+]
+const thinkingText = ref(THINKING_WORDS[0])
+let thinkingTimer = null
+
+function startThinking() {
+  stopThinking()
+  thinkingText.value = THINKING_WORDS[Math.floor(Math.random() * THINKING_WORDS.length)]
+  let i = THINKING_WORDS.indexOf(thinkingText.value)
+  thinkingTimer = setInterval(() => {
+    i = (i + 1) % THINKING_WORDS.length
+    thinkingText.value = THINKING_WORDS[i]
+  }, 2200)
+}
+
+function stopThinking() {
+  if (thinkingTimer) {
+    clearInterval(thinkingTimer)
+    thinkingTimer = null
+  }
+}
+
+function floatWidth() {
+  return Math.min(PANEL_W, vp.w - EDGE * 2)
+}
+
+function floatHeight() {
+  return Math.max(420, vp.h - 32)
+}
+
+function placePanel() {
+  panelPos.x = Math.max(EDGE, vp.w - floatWidth() - 24)
+  panelPos.y = 16
+}
+
+const panelStyle = computed(() => {
+  // 固定侧栏：窗口尺寸与浮层完全一致，只是贴在右侧且不能拖动
+  if (docked.value) {
+    return {
+      top: '16px',
+      right: '0px',
+      width: floatWidth() + 'px',
+      height: floatHeight() + 'px',
+      left: 'auto',
+      borderRadius: '20px 0 0 20px'
+    }
+  }
+  return {
+    left: panelPos.x + 'px',
+    top: panelPos.y + 'px',
+    right: 'auto',
+    width: floatWidth() + 'px',
+    height: floatHeight() + 'px',
+    borderRadius: '20px'
+  }
+})
+
+const fabStyle = computed(() => {
+  if (fabPos.left == null) {
+    return { right: '32px', bottom: '96px' }
+  }
+  return { left: fabPos.left + 'px', top: fabPos.top + 'px', right: 'auto', bottom: 'auto' }
+})
+
+function onFabDrag(e) {
+  if (!fabDrag) return
+  e.preventDefault()
+  const dx = e.clientX - fabDrag.sx
+  const dy = e.clientY - fabDrag.sy
+  if (Math.abs(dx) + Math.abs(dy) > 5) fabDrag.moved = true
+  fabPos.left = Math.min(Math.max(fabDrag.ox + dx, 8), vp.w - FAB_SIZE - 8)
+  fabPos.top = Math.min(Math.max(fabDrag.oy + dy, 8), vp.h - FAB_SIZE - 8)
+}
+
+function onFabUp(e) {
+  window.removeEventListener('pointermove', onFabDrag)
+  window.removeEventListener('pointerup', onFabUp)
+  window.removeEventListener('pointercancel', onFabUp)
+  const moved = fabDrag ? fabDrag.moved : false
+  fabDrag = null
+  assistantMood.value = 'happy'
+  // 指针被系统取消（如切窗口）不算点击
+  if (e && e.type === 'pointercancel') return
+  // 没拖动（只是点一下）才打开面板，避免拖动结束误触
+  if (!moved) openPanel()
+}
+
+function onResize() {
+  vp.w = window.innerWidth
+  vp.h = window.innerHeight
+  if (docked.value) return
+  panelPos.x = Math.min(Math.max(panelPos.x, EDGE), Math.max(EDGE, vp.w - floatWidth() - EDGE))
+  panelPos.y = Math.min(Math.max(panelPos.y, 16), Math.max(16, vp.h - floatHeight() - 16))
+}
+
+onMounted(async () => {
+  vp.w = window.innerWidth
+  vp.h = window.innerHeight
+  placePanel()
+  window.addEventListener('resize', onResize)
+  window.addEventListener('canteen:assistant-ask', onExternalAsk)
+  try {
+    const res = await getChatSuggestions()
+    suggestions.value = (res.data && res.data.length)
+      ? res.data
+      : (isMerchant.value ? MERCHANT_SUGGESTIONS : STUDENT_SUGGESTIONS)
+  } catch {
+    suggestions.value = isMerchant.value ? MERCHANT_SUGGESTIONS : STUDENT_SUGGESTIONS
+  }
+  try {
+    const res = await getChatEngine()
+    engine.value = res.data || 'agent'
+  } catch {
+    engine.value = 'agent'
+  }
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', onResize)
+  window.removeEventListener('pointermove', onHeadDrag)
+  window.removeEventListener('pointerup', onHeadUp)
+  window.removeEventListener('pointermove', onFabDrag)
+  window.removeEventListener('pointerup', onFabUp)
+  window.removeEventListener('pointercancel', onFabUp)
+  window.removeEventListener('canteen:assistant-ask', onExternalAsk)
+  stopThinking()
+})
+
+/** 来自美食探索页快捷提问：唤起面板并发送问题 */
+function onExternalAsk(e) {
+  const q = e.detail
+  if (!q) return
+  openPanel()
+  // 等面板展开后再发送，确保消息可见
+  nextTick(() => send(q))
+}
+
+/* ---------------- 面板操作 ---------------- */
+
+function openPanel() {
+  open.value = true
+  scrollBottom()
+}
+
+function closePanel() {
+  open.value = false
+}
+
+function newSession() {
+  // 清空本地视图；sessionId 置空，下一轮问答后端会自动新建/复用热会话
+  messages.value = []
+  draft.value = ''
+  suggestionOffset.value = 0
+  sessionId.value = null
+  historyOpen.value = false
+  open.value = true
+  scrollBottom()
+}
+
+/* ---------------- 历史会话 ---------------- */
+
+async function openHistory() {
+  historyOpen.value = true
+  sessionsLoading.value = true
+  try {
+    const res = await getChatSessions()
+    sessions.value = res.data || []
+  } catch {
+    sessions.value = []
+  } finally {
+    sessionsLoading.value = false
+  }
+}
+
+/** 恢复某个历史会话到当前视图（助手消息用 answerJson 还原卡片） */
+async function loadSession(id) {
+  if (loading.value) return
+  try {
+    const res = await getChatSessionMessages(id)
+    const msgs = res.data
+    if (!msgs) return
+    sessionId.value = id
+    historyOpen.value = false
+    const restored = []
+    for (const m of msgs) {
+      if (m.role === 'user') {
+        restored.push({ role: 'user', text: m.content })
+      } else {
+        let answer = null
+        if (m.answerJson) {
+          try {
+            answer = JSON.parse(m.answerJson)
+          } catch {
+            answer = null
+          }
+        }
+        if (answer && typeof answer.text === 'string') {
+          restored.push({ role: 'bot', streaming: false, answer })
+        } else {
+          restored.push({
+            role: 'bot',
+            streaming: false,
+            answer: { text: m.content, hit: true, items: [], quickReplies: [], sources: null, actions: [] }
+          })
+        }
+      }
+    }
+    messages.value = restored
+    open.value = true
+    scrollBottom()
+  } catch {
+    // 加载失败保持现状
+  }
+}
+
+async function removeSession(id) {
+  try {
+    await deleteChatSession(id)
+    sessions.value = sessions.value.filter(s => s.id !== id)
+    if (sessionId.value === id) {
+      // 删掉的是当前正在看的会话：清空视图
+      sessionId.value = null
+      messages.value = []
+    }
+  } catch {
+    // 删除失败忽略
+  }
+}
+
+function formatTime(t) {
+  if (!t) return ''
+  const d = new Date(t)
+  if (Number.isNaN(d.getTime())) return ''
+  const now = new Date()
+  const sameDay = d.toDateString() === now.toDateString()
+  if (sameDay) {
+    return `今天 ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  }
+  return `${d.getMonth() + 1}/${d.getDate()}`
+}
+
+function toggleDock() {
+  docked.value = !docked.value
+  localStorage.setItem('canteen_chat_docked', docked.value ? '1' : '0')
+  if (docked.value) {
+    open.value = true
+  } else {
+    // 取消固定后恢复为可拖动的浮层位置
+    placePanel()
+  }
+}
+
+function refreshSuggestions() {
+  if (!suggestions.value.length) return
+  suggestionOffset.value = (suggestionOffset.value + SUGGESTION_PAGE) % suggestions.value.length
+}
+
+/* ---------------- 浮动面板拖动 ---------------- */
+
+let headDrag = null
+
+function onHeadDown(e) {
+  // 固定侧栏时不可拖动
+  if (docked.value) return
+  if (e.button !== undefined && e.button !== 0) return
+  if (e.target.closest('button')) return
+  e.preventDefault()
+  headDrag = { sx: e.clientX, sy: e.clientY, ox: panelPos.x, oy: panelPos.y }
+  window.addEventListener('pointermove', onHeadDrag)
+  window.addEventListener('pointerup', onHeadUp)
+}
+
+function onHeadDrag(e) {
+  if (!headDrag) return
+  const w = floatWidth()
+  const h = floatHeight()
+  panelPos.x = Math.min(Math.max(headDrag.ox + e.clientX - headDrag.sx, EDGE), vp.w - w - EDGE)
+  panelPos.y = Math.min(Math.max(headDrag.oy + e.clientY - headDrag.sy, EDGE), vp.h - h - EDGE)
+  isDragging.value = true
+}
+
+function onHeadUp() {
+  window.removeEventListener('pointermove', onHeadDrag)
+  window.removeEventListener('pointerup', onHeadUp)
+  headDrag = null
+  isDragging.value = false
+}
+
+/* ---------------- 问答 ---------------- */
+
+async function send(text) {
+  const question = String(text || '').trim()
+  if (!question || loading.value) return
+  draft.value = ''
+  messages.value.push({ role: 'user', text: question })
+  loading.value = true
+  assistantMood.value = 'think'
+  startThinking()
+  scrollBottom()
+
+  // 先插入一条空的机器人消息，流式过程中往里追加文字
+  const botMsg = reactive({
+    role: 'bot',
+    streaming: false,
+    answer: { text: '', hit: true, items: [], quickReplies: [], sources: null, actions: [] }
+  })
+  messages.value.push(botMsg)
+  let streaming = false
+
+  try {
+    await askChatStream(question, buildHistory(), {
+      onDelta(piece) {
+        if (!streaming) {
+          streaming = true
+          botMsg.streaming = true
+          loading.value = false
+          stopThinking()
+        }
+        // 回答过程中两只挥手表情交替，更活泼
+        assistantMood.value = waveFlip.value ? 'wave2' : 'wave'
+        waveFlip.value = !waveFlip.value
+        botMsg.answer.text += piece
+        scrollBottom()
+      },
+      onDone(answer) {
+        if (answer) {
+          // 用服务端最终答案覆盖，确保文字与卡片一致
+          botMsg.answer = {
+            ...answer,
+            text: answer.text || botMsg.answer.text
+          }
+          // 记住后端分配/复用的会话ID，下一轮带回去实现持久化
+          if (answer.sessionId) {
+            sessionId.value = answer.sessionId
+          }
+          // 本次回答包含加购（后端返回了「去购物车」动作）：刷新购物车角标并弹出购物车，让用户立刻看到
+          if (hasCartAction(answer)) {
+            window.dispatchEvent(new CustomEvent('canteen:cart-changed'))
+            cartStore.openDrawer()
+          }
+        }
+        botMsg.streaming = false
+        scrollBottom()
+      }
+    }, sessionId.value)
+  } catch (e) {
+    botMsg.streaming = false
+    assistantMood.value = 'speechless'
+    if (botMsg.answer.text) {
+      // 已经流出一部分，保留内容只提示中断
+      botMsg.answer.text += '\n（回答中断，请重试）'
+    } else {
+      // 一个字都没收到：退回非流式接口兜底
+      try {
+        const res = await askChat(question, buildHistory(), sessionId.value)
+        botMsg.answer = res.data
+        if (res.data?.sessionId) {
+          sessionId.value = res.data.sessionId
+        }
+        if (hasCartAction(res.data)) {
+          window.dispatchEvent(new CustomEvent('canteen:cart-changed'))
+          cartStore.openDrawer()
+        }
+      } catch (e2) {
+        botMsg.answer = {
+          text: e2?.message || e?.message || '暂时没能回答，稍后再试试',
+          hit: false,
+          items: [],
+          quickReplies: []
+        }
+      }
+    }
+  } finally {
+    stopThinking()
+    loading.value = false
+    botMsg.streaming = false
+    if (!botMsg.answer.text) {
+      botMsg.answer.text = '暂时没能回答，稍后再试试'
+    }
+    assistantMood.value = 'happy'
+    scrollBottom()
+  }
+}
+
+/**
+ * 组装多轮历史：只保留最近 6 轮（12 条），供后端理解「它」「那家」这类指代。
+ * 本轮提问已经单独传，历史里只放之前的对话。
+ */
+function buildHistory() {
+  const list = []
+  const recent = messages.value.slice(-12)
+  for (const m of recent) {
+    if (m.role === 'user' && m.text) {
+      list.push({ role: 'user', content: m.text })
+    } else if (m.role === 'bot' && m.answer?.text) {
+      list.push({ role: 'assistant', content: m.answer.text })
+    }
+  }
+  return list
+}
+
+async function scrollBottom() {
+  await nextTick()
+  if (bodyEl.value) bodyEl.value.scrollTop = bodyEl.value.scrollHeight
+}
+</script>
+
+<style scoped>
+.chat-widget {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.chat-widget > * {
+  pointer-events: auto;
+}
+
+/* ---------- 悬浮球：白色圆形，无脉冲 ---------- */
+.chat-fab {
+  position: absolute;
+  width: 62px;
+  height: 62px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 50%;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  /* 关键：禁止浏览器接管触摸/拖拽手势，否则拖动时 pointermove 会被原生滚动或拖拽抢走 */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.06);
+  transition: transform 0.2s var(--ease-apple), box-shadow 0.2s var(--ease-apple);
+  z-index: 3;
+}
+
+.fab-img {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  border-radius: 50%;
+  pointer-events: none;
+  -webkit-user-drag: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.chat-fab:hover {
+  transform: scale(1.04);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.16), 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.chat-fab:active {
+  cursor: grabbing;
+  transform: scale(0.96);
+}
+
+/* ---------- 面板 ---------- */
+.chat-panel {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  /* panelStyle 以行内样式给出 20px，这里统一为 24px */
+  border-radius: var(--radius-xl) !important;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.16), 0 2px 8px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+  z-index: 1;
+}
+
+.chat-panel.panel-dragging {
+  transition: none;
+}
+
+/* 固定侧栏让出 64px 顶栏，并贴合视口底部 */
+.chat-panel.panel-docked {
+  top: 80px !important;
+  bottom: 16px !important;
+  height: auto !important;
+  border-radius: 20px 0 0 20px !important;
+}
+
+/* ---------- 头部 ---------- */
+.chat-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.panel-dragging .chat-head {
+  cursor: grabbing;
+}
+
+.panel-docked .chat-head {
+  cursor: default;
+}
+
+.head-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.head-avatar-img {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+}
+
+.head-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.head-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-1);
+}
+
+.head-sub {
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.head-btn {
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s var(--ease-apple), color 0.15s var(--ease-apple);
+}
+
+.head-btn:hover {
+  background: var(--bg);
+  color: var(--text-1);
+}
+
+.head-btn-on {
+  background: #f0f0f2;
+  color: var(--text-1);
+}
+
+.head-close:hover {
+  background: #fdeaea;
+  color: #b42318;
+}
+
+/* ---------- 消息画布 ---------- */
+.chat-body {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px 18px 20px;
+  background: var(--bg);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.16) transparent;
+}
+
+.chat-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.chat-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-body::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.12);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.chat-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.22);
+  background-clip: content-box;
+}
+
+/* ---------- 欢迎区 ---------- */
+.chat-welcome {
+  text-align: center;
+  padding: 18px 2px 4px;
+}
+
+.welcome-icon {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 12px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: var(--shadow-xs);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.welcome-icon-img {
+  width: 46px;
+  height: 46px;
+  object-fit: contain;
+}
+
+.welcome-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-1);
+}
+
+.welcome-sub {
+  margin: 5px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-3);
+}
+
+.suggest-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 24px 2px 10px;
+}
+
+.suggest-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+
+.refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 3px 6px;
+  border-radius: 8px;
+  transition: background 0.15s var(--ease-apple), color 0.15s var(--ease-apple);
+}
+
+.refresh-btn:hover:not(:disabled) {
+  background: #ececf0;
+  color: var(--text-1);
+}
+
+.refresh-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.refresh-btn svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* 2×2 浅色建议卡 */
+.suggestion-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  text-align: left;
+}
+
+.suggestion-item {
+  display: flex;
+  align-items: flex-start;
+  width: 100%;
+  min-height: 52px;
+  padding: 11px 12px;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.45;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.16s var(--ease-apple), box-shadow 0.16s var(--ease-apple),
+    transform 0.16s var(--ease-apple), color 0.16s var(--ease-apple);
+}
+
+.suggestion-item:hover {
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
+  color: var(--text-1);
+}
+
+.suggestion-text {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ---------- 消息 ---------- */
+.msg {
+  display: flex;
+}
+
+.msg.user {
+  justify-content: flex-end;
+}
+
+.user-text {
+  max-width: 78%;
+  padding: 9px 14px;
+  border-radius: 18px 18px 4px 18px;
+  background: #1d1d1f;
+  color: #fff;
+  font-size: 13.5px;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.msg.bot {
+  justify-content: flex-start;
+}
+
+.msg.bot > :deep(*) {
+  width: 100%;
+}
+
+.msg.bot:has(.typing) {
+  align-items: center;
+  gap: 0;
+}
+
+.msg.bot:has(.typing) > :deep(.typing) {
+  width: auto;
+  flex-shrink: 0;
+}
+
+/* 流式临时气泡与 AnswerBubble 同观感：无外框 */
+.streaming-bubble {
+  background: transparent;
+  border: none;
+  border-radius: 18px;
+  padding: 0;
+  box-shadow: none;
+}
+
+.streaming-text {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--text-1);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.caret {
+  display: inline-block;
+  width: 2px;
+  height: 13px;
+  margin-left: 2px;
+  vertical-align: -2px;
+  background: var(--text-3);
+  animation: caret-blink 0.9s steps(2, start) infinite;
+}
+
+@keyframes caret-blink {
+  to { visibility: hidden; }
+}
+
+.typing {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  padding: 12px 14px;
+  background: #fff;
+  border: none;
+  border-radius: 18px 18px 18px 4px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.typing i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-3);
+  animation: typing-bounce 1.2s infinite ease-in-out;
+}
+
+.typing i:nth-child(2) { animation-delay: 0.15s; }
+.typing i:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes typing-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
+  30% { transform: translateY(-4px); opacity: 1; }
+}
+
+.typing-hint {
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--text-3);
+  animation: hint-fade 0.4s ease;
+}
+
+@keyframes hint-fade {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ---------- 输入 ---------- */
+.chat-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 6px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+
+.chat-input-field {
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  border: none;
+  border-radius: 999px;
+  padding: 0 16px;
+  background: #f2f2f5;
+  color: var(--text-1);
+  font-size: 13.5px;
+  font-family: inherit;
+  outline: none;
+  transition: background 0.16s var(--ease-apple), box-shadow 0.16s var(--ease-apple);
+}
+
+.chat-input-field::placeholder {
+  color: var(--text-3);
+}
+
+.chat-input-field:focus {
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--brand) inset, 0 0 0 3px rgba(255, 122, 26, 0.12);
+}
+
+.send-btn {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: var(--brand);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.16s var(--ease-apple), transform 0.12s var(--ease-apple),
+    opacity 0.16s var(--ease-apple);
+}
+
+.send-btn:hover:not(:disabled) {
+  background: var(--brand-dark);
+}
+
+.send-btn:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.send-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* ---------- 底部快捷指令 ---------- */
+.chat-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 14px 12px;
+  background: var(--surface);
+}
+
+.quick-btn {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 11.5px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s var(--ease-apple), border-color 0.15s var(--ease-apple),
+    color 0.15s var(--ease-apple);
+}
+
+.quick-btn:hover:not(:disabled) {
+  background: var(--bg);
+  border-color: var(--border-strong);
+  color: var(--text-1);
+}
+
+.quick-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ---------- 历史会话侧栏 ---------- */
+.history-mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.18);
+  z-index: 5;
+  display: flex;
+}
+
+.history-side {
+  width: min(300px, 86%);
+  height: 100%;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 12px 0 40px rgba(0, 0, 0, 0.10);
+}
+
+.history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.history-title {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-1);
+}
+
+.history-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.16) transparent;
+}
+
+.history-empty {
+  padding: 22px 14px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-3);
+  text-align: center;
+}
+
+.history-item {
+  position: relative;
+  padding: 10px 30px 10px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.15s var(--ease-apple);
+}
+
+.history-item:hover {
+  background: var(--bg);
+}
+
+.history-item.active {
+  background: #fff4ec;
+}
+
+.history-item-text {
+  font-size: 13px;
+  color: var(--text-1);
+  line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.history-item-meta {
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.history-del {
+  position: absolute;
+  top: 8px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-3);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.history-item:hover .history-del {
+  display: flex;
+}
+
+.history-del:hover {
+  background: #fdeaea;
+  color: #b42318;
+}
+
+.history-foot {
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: center;
+}
+
+/* ---------- 侧栏滑入滑出：同一方向进退（Apple：路径对称） ---------- */
+.history-slide-enter-active,
+.history-slide-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.history-slide-enter-active .history-side,
+.history-slide-leave-active .history-side {
+  transition: transform 0.26s var(--ease-apple);
+}
+
+.history-slide-enter-from,
+.history-slide-leave-to {
+  opacity: 0;
+}
+
+.history-slide-enter-from .history-side,
+.history-slide-leave-to .history-side {
+  transform: translateX(-16px);
+}
+
+/* ---------- 打开/关闭 ---------- */
+.chat-pop-enter-active,
+.chat-pop-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.chat-pop-enter-from,
+.chat-pop-leave-to {
+  opacity: 0;
+  transform: translateY(10px) scale(0.98);
+}
+
+</style>

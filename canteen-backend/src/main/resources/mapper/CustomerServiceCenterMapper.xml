@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.qmz.canteen.mapper.CustomerServiceCenterMapper">
+
+    <!-- 列表和 COUNT 复用完全相同的数据集和条件，不限制任一来源的候选条数。 -->
+    <sql id="knowledgeRows">
+        SELECT f.id AS id, 'FAQ' AS kind, f.question AS question, f.answer AS answer,
+               f.category AS category, NULL AS scene, f.keywords AS keywords,
+               f.sort_no AS sortNo, f.status AS status, NULL AS tags, NULL AS score,
+               NULL AS stallId, NULL AS source, NULL AS hasEmbedding, f.create_time AS createTime
+        FROM sys_faq f
+        WHERE f.deleted = 0
+        UNION ALL
+        SELECT e.id AS id, 'EXPERIENCE' AS kind, e.problem AS question, e.solution AS answer,
+               NULL AS category, e.scene AS scene, NULL AS keywords,
+               NULL AS sortNo, NULL AS status, e.tags AS tags, e.score AS score,
+               e.stall_id AS stallId, e.source AS source,
+               CASE WHEN e.embedding IS NOT NULL AND TRIM(e.embedding) != '' THEN 1 ELSE 0 END AS hasEmbedding,
+               e.create_time AS createTime
+        FROM ai_experience e
+        WHERE e.deleted = 0
+    </sql>
+
+    <sql id="knowledgeFilters">
+        <where>
+            <if test="query.kind != null and query.kind != ''">
+                AND knowledge.kind = #{query.kind}
+            </if>
+            <!-- 分类只显示 FAQ，场景只显示经验；同时指定两者时无匹配记录。 -->
+            <if test="query.category != null and query.category.trim() != ''">
+                AND knowledge.kind = 'FAQ' AND knowledge.category = #{query.category}
+            </if>
+            <if test="query.scene != null and query.scene.trim() != ''">
+                AND knowledge.kind = 'EXPERIENCE' AND knowledge.scene = #{query.scene}
+            </if>
+            <if test="query.keyword != null and query.keyword.trim() != ''">
+                AND (knowledge.question LIKE CONCAT('%', #{query.keyword}, '%')
+                     OR knowledge.answer LIKE CONCAT('%', #{query.keyword}, '%')
+                     OR knowledge.keywords LIKE CONCAT('%', #{query.keyword}, '%')
+                     OR knowledge.tags LIKE CONCAT('%', #{query.keyword}, '%'))
+            </if>
+        </where>
+    </sql>
+
+    <select id="selectKnowledge" resultType="com.qmz.canteen.vo.KnowledgeItemVO">
+        SELECT knowledge.* FROM (<include refid="knowledgeRows"/>) knowledge
+        <include refid="knowledgeFilters"/>
+        ORDER BY knowledge.createTime DESC, knowledge.kind, knowledge.id DESC
+        LIMIT #{query.size} OFFSET #{offset}
+    </select>
+
+    <select id="countKnowledge" resultType="long">
+        SELECT COUNT(*) FROM (<include refid="knowledgeRows"/>) knowledge
+        <include refid="knowledgeFilters"/>
+    </select>
+
+    <sql id="recordRows">
+        SELECT c.id AS id, 'CHAT' AS kind, c.question AS question,
+               IFNULL(u.real_name, '已注销') AS person, NULL AS stallName,
+               CASE WHEN c.hit = 0 THEN 'MISS'
+                    WHEN c.helpful = 0 THEN 'UNHELPFUL' ELSE 'ANSWERED' END AS status,
+               c.hit AS hit, c.helpful AS helpful, c.cost_ms AS costMs, c.intent_label AS intentLabel,
+               NULL AS merchantUnread, NULL AS orderId, c.create_time AS createTime
+        FROM chat_log c
+        LEFT JOIN sys_user u ON u.id = c.user_id AND u.deleted = 0
+        UNION ALL
+        SELECT s.id AS id, 'SESSION' AS kind, s.last_message AS question,
+               IFNULL(u.real_name, '已注销') AS person, st.name AS stallName, s.status AS status,
+               NULL AS hit, NULL AS helpful, NULL AS costMs, NULL AS intentLabel,
+               s.merchant_unread AS merchantUnread, s.order_id AS orderId,
+               COALESCE(s.last_message_time, s.update_time, s.create_time) AS createTime
+        FROM customer_service_session s
+        LEFT JOIN sys_user u ON u.id = s.user_id AND u.deleted = 0
+        LEFT JOIN canteen_stall st ON st.id = s.stall_id AND st.deleted = 0
+        WHERE s.deleted = 0
+    </sql>
+
+    <sql id="recordFilters">
+        <where>
+            <if test="query.kind != null and query.kind != ''">
+                AND records.kind = #{query.kind}
+            </if>
+            <if test="query.state == 'ATTENTION'">
+                AND ((records.kind = 'CHAT' AND (records.hit = 0 OR records.helpful = 0))
+                     OR (records.kind = 'SESSION' AND records.merchantUnread > 0))
+            </if>
+            <if test="query.keyword != null and query.keyword.trim() != ''">
+                AND (records.question LIKE CONCAT('%', #{query.keyword}, '%')
+                     OR records.person LIKE CONCAT('%', #{query.keyword}, '%')
+                     OR records.stallName LIKE CONCAT('%', #{query.keyword}, '%'))
+            </if>
+        </where>
+    </sql>
+
+    <select id="selectRecords" resultType="com.qmz.canteen.vo.CustomerServiceRecordVO">
+        SELECT records.* FROM (<include refid="recordRows"/>) records
+        <include refid="recordFilters"/>
+        ORDER BY records.createTime DESC, records.kind, records.id DESC
+        LIMIT #{query.size} OFFSET #{offset}
+    </select>
+
+    <select id="countRecords" resultType="long">
+        SELECT COUNT(*) FROM (<include refid="recordRows"/>) records
+        <include refid="recordFilters"/>
+    </select>
+
+</mapper>

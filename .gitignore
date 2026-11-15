@@ -1,0 +1,36 @@
+node_modules/
+dist/
+target/
+*.class
+*.log
+.idea/
+.vscode/
+*.iml
+.DS_Store
+.codegraph/
+.workbuddy/
+
+# 数据生成临时文件
+scripts/generated_data.sql
+scripts/orders_and_sales.sql
+scripts/sales_only.sql
+scripts/backup_before_regenerate.sql
+
+# 原始素材目录（已复制到前端 public，仅忽略仓库根目录下同名目录）
+avatar/
+gourmet food/
+/AI/
+/Merchant/
+/logo/
+__pycache__/
+
+# Claude Code 本地目录（技能、工作记录、启动配置不进公开仓库）
+.claude/
+
+# 本机私有密钥配置（模型 key、支付宝沙箱密钥），启动脚本自动加载
+env.local.bat
+
+# 运行时用户上传目录：已跟踪的演示图保留，新上传不再进仓库
+# 唯一上传目录 = canteen-backend/uploads/（start-backend.bat 启动时 cd 到 canteen-backend）
+canteen-backend/uploads/
+/uploads/

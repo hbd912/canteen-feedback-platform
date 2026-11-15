@@ -1,0 +1,107 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+
+spring:
+  config:
+    import: optional:classpath:cart-payment.yml
+  application:
+    name: canteen-backend
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/canteen_feedback?characterEncoding=UTF-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: 123456
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 10MB
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+jwt:
+  secret: canteen-feedback-system-jwt-secret-key-2026-qimozuoye-must-be-long-enough
+  expiration: 86400000
+
+canteen:
+  # 评分 >= 该值视为好评
+  good-rating-threshold: 4
+  # 数据库自动迁移：启动时执行 db/migration/ 下未执行过的 V*.sql（小组协作自动同步结构变更）
+  db-migration:
+    enabled: true
+  # 智能体（大模型）配置。enabled=false 时完全走本地规则引擎，断网可用
+  agent:
+    enabled: true
+    # 智谱开放平台（OpenAI 兼容协议）
+    base-url: https://open.bigmodel.cn/api/paas/v4
+    # Key 走环境变量 CANTEEN_AGENT_KEY（本机可在仓库根 env.local.bat 配置，该文件不入库）。
+    # 未配置时智能体自动降级为本地规则引擎，系统照常运行。
+    api-key: ${CANTEEN_AGENT_KEY:}
+    # glm-4-flash：智谱完全免费模型，无思考链、支持工具调用、实测稳定（连测均成功）。
+    # 注：air/airx 属付费模型，免费额度用完后会报 1113「余额不足」；硅基流动 key 也余额不足。
+    # 免费额度下 glm-4-flash 是「免费 + 快 + 支持 function calling」的最优解。
+    model: glm-4-flash
+    # 高速模型单轮很快，超时收窄以便快速失败、快速降级
+    timeout-ms: 20000
+    # 一次提问里可能要分别加购多道菜，轮数太少会来不及调用 add_to_cart
+    max-tool-rounds: 3
+    history-limit: 8
+    temperature: 0.2
+    # 放宽输出：800 会把正常推荐/解释拦腰截断，1200 足够一段完整回答
+    max-tokens: 1200
+    fallback-to-rule: true
+    enable-for-admin: true
+  # 多模型路由：高频走智谱(已有免费额度)，低频/难任务走硅基流动(免费)，互不挤兑
+  ai:
+    # 硅基流动只放「批量/难任务」，避免和智谱抢同一个限流池
+    siliconflow:
+      base-url: https://api.siliconflow.cn/v1
+      # Key 走环境变量 SILICONFLOW_API_KEY（本机可在仓库根 env.local.bat 配置）
+      api-key: ${SILICONFLOW_API_KEY:}
+      # 备注：GLM-4-9B-0414 曾实测超时不通，改回 Qwen2.5-7B(0.5s稳定)
+      fast-model: Qwen/Qwen2.5-7B-Instruct
+      reasoning-model: deepseek-ai/DeepSeek-R1-0528-Qwen3-8B
+      vision-model: Qwen/Qwen3-VL-8B-Instruct
+      vision-fallback-model: Qwen/Qwen3-VL-30B-A3B-Instruct
+      embedding-model: BAAI/bge-m3
+      timeout-ms: 30000
+      # 视觉模型正常 1~4 秒；偶发连接重置时 8 秒内失败，交给 GLM/DeepSeek 兜底
+      vision-timeout-ms: 8000
+    # 算力平台：GLM-5.3-Flash（1 亿 token）做视觉主力 + 文本兜底，可关闭长思考
+    scnet:
+      base-url: https://api.scnet.cn/api/llm/v1
+      # Key 走环境变量 SCNET_GLM_KEY（本机可在仓库根 env.local.bat 配置）
+      api-key: ${SCNET_GLM_KEY:}
+      glm-model: GLM-5.3-Flash
+      # 5000 万 token 的 DeepSeek：大脑/报告主力，默认关思考
+      deepseek-api-key: ${SCNET_DEEPSEEK_KEY:}
+      deepseek-model: DeepSeek-V4.1-Flash-1017-Event
+      timeout-ms: 30000
+      vision-timeout-ms: 10000
+      deepseek-vision-timeout-ms: 12000
+      disable-thinking: true
+    # 硅基失败时是否回落智谱
+    fallback-to-zhipu: true
+  # 各场景提示词集中管理（代码里不再硬编码话术）
+  prompts:
+    moderation: "你是校园食堂的内容安全审核员。判断用户输入是否包含辱骂、人身攻击、色情低俗、广告引流、政治敏感等违规内容。只输出一个 JSON 对象，不要任何解释：{\"flagged\":布尔,\"category\":\"类别\",\"reason\":\"简短理由\"}。正常、礼貌、批评性但文明的反馈，flagged 必须为 false（批评不等于违规）。"
+    moderation-reply: "你是校园食堂平台的客服。学生的一条发言因违规被系统屏蔽，请用一句温和、不刺激的话告诉学生：哪类内容不合适、希望怎么修改后重新发布。只输出这一句话，30 字内，不要道歉过头，不要编造规则。"
+    insight: "你是校园食堂管理员的 AI 值班助理。基于后台待办清单，先给出分类、再给结论，措辞自然口语化，像值班同事在群里汇报。只根据给定清单判断，不得编造数字、订单、人名或事实。只输出 JSON：{\"summary\":\"用 50-90 字汇报：先列出需要人工处理的类别及条数（用 ①②③ 编号，按 needActionItems 的类别归并计数），再提一句可自动处理的类别与条数（按 autoHandleableItems）；语气自然\",\"replies\":[{\"id\":\"清单中的id\",\"reply\":\"60字内安抚回复，不承诺退款、赔偿或处罚\"}],\"notes\":[{\"id\":\"清单中的id\",\"note\":\"40字内给管理员的判断\"}]}。summary 里只能使用 needActionItems / autoHandleableItems 里真实存在的类别和数量，没有就写 0。只使用清单中出现的 id；不要给退款、评价、处罚或上架审核写执行承诺。不要输出 Markdown。"
+    handle-summary: "你是校园食堂管理员的值班助理。根据处理明细，用 2-3 句自然的中文向管理员汇报：处理了哪些、怎么处理的（给谁回了什么），还剩什么需要管理员确认。不要 Markdown、不要罗列表格、不要编造数字，总长不超过 150 字。"
+    greeting: "你是校园食堂管理员的值班助理，正在和工作台管理员对话。根据给定的待办统计，用 1-2 句自然、简洁的中文打招呼并概括今天的待办情况（哪类多、哪类要人工）。只输出这两句话，40-80字，不要 Markdown，不要编造数字。如果待办为 0，就说今天很清净。"
+    dish-audit: "你是校园食堂的上架审核员，负责把关菜品上架质量。送到你这里的菜品已通过基础检查（图片已上传、无乱码、无广告、价格在 1~100 元内），你的任务是判断剩余信息是否像一道真实的食堂菜品。通过标准（全部满足才通过）：名称是真实存在的菜名或合理的家常菜叫法；分类与名称匹配；描述如实介绍菜品（可有可无，但不能虚假宣传）；价格与菜品类型相称。驳回情况：名称是生造词、凑字词或与食物无关（如“zzz”“测试1号”“无敌超级靠山”这类不像菜的名字）；描述含虚假功效宣传（治病、减肥、壮阳等）或与菜品明显无关；名称与分类完全对不上；价格与菜品类型明显不匹配（如白米饭 80 元）。宁可错杀、不可放过：拿不准是不是正经菜 → 驳回。只输出 JSON：{\"approved\":布尔,\"reason\":\"通过或驳回的简短理由，30字内\"}。不要输出其他内容。"

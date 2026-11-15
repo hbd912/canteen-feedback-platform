@@ -1,0 +1,62 @@
+package com.qmz.canteen.entity;
+
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableLogic;
+import com.baomidou.mybatisplus.annotation.TableName;
+import lombok.Data;
+
+import java.time.LocalDateTime;
+
+@Data
+@TableName("dish_review")
+public class DishReview {
+
+    /** 0-待审核 1-已发布 2-已屏蔽 */
+    public static final int STATUS_PENDING = 0;
+    public static final int STATUS_PUBLISHED = 1;
+    public static final int STATUS_BLOCKED = 2;
+
+    @TableId(type = IdType.AUTO)
+    private Long id;
+
+    private Long dishId;
+
+    private Long userId;
+
+    private Integer rating;
+
+    private String content;
+
+    private Integer anonymous;
+
+    private Integer status;
+
+    /** 商家回复内容 */
+    private String merchantReply;
+
+    /** 商家回复时间 */
+    private LocalDateTime merchantReplyTime;
+
+    /** 回复来源：MANUAL 人工 / AI 智能托管 */
+    private String merchantReplySource;
+
+    /** 商家处理状态：0-待处理 1-已处理 */
+    private Integer handled;
+
+    /** 点赞数 */
+    private Integer likeCount;
+
+    /** 浏览量 */
+    private Integer viewCount;
+
+    /** 学生回复数 */
+    private Integer replyCount;
+
+    private LocalDateTime createTime;
+
+    private LocalDateTime updateTime;
+
+    @TableLogic
+    private Integer deleted;
+}

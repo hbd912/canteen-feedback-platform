@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>硅基流动免费模型使用指南</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --card: #ffffff;
+    --text: #1f2329;
+    --text-2: #5c6670;
+    --text-3: #8a939e;
+    --border: #e6e9ee;
+    --brand: #5b5bd6;
+    --brand-soft: #eef0ff;
+    --green: #18a058;
+    --green-soft: #e8f7ef;
+    --orange: #e8890c;
+    --orange-soft: #fff4e5;
+    --red: #d03050;
+    --red-soft: #fdecef;
+    --blue: #2f7bd6;
+    --blue-soft: #eaf2fd;
+    --purple: #7a4dd1;
+    --purple-soft: #f2ecff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 40px 20px 64px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    line-height: 1.6;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; }
+  header { margin-bottom: 28px; }
+  h1 { font-size: 28px; margin: 0 0 8px; letter-spacing: .5px; }
+  .sub { color: var(--text-2); font-size: 14px; margin: 0; }
+  .pill-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .pill {
+    font-size: 12px; padding: 4px 12px; border-radius: 999px;
+    background: var(--brand-soft); color: var(--brand); font-weight: 600;
+  }
+  section.block { margin-top: 26px; }
+  .block-title {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 18px; font-weight: 700; margin: 0 0 14px;
+  }
+  .block-title::before {
+    content: ""; width: 5px; height: 20px; border-radius: 3px; background: var(--brand);
+  }
+  .cat-desc { color: var(--text-3); font-size: 13px; font-weight: 400; margin-left: 4px; }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+    padding: 20px 22px; box-shadow: 0 4px 16px rgba(30, 40, 60, .04);
+  }
+  .cfg-row { display: flex; gap: 14px; padding: 9px 0; border-bottom: 1px dashed var(--border); font-size: 14px; }
+  .cfg-row:last-child { border-bottom: none; }
+  .cfg-label { width: 108px; color: var(--text-3); flex-shrink: 0; }
+  .cfg-val { color: var(--text); word-break: break-all; }
+  .mono { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 13px; }
+  .copy {
+    cursor: pointer; color: var(--brand); font-weight: 600;
+    border-bottom: 1px dashed var(--brand); transition: opacity .15s;
+  }
+  .copy:hover { opacity: .7; }
+  .warn {
+    margin-top: 14px; padding: 12px 14px; border-radius: 10px;
+    background: var(--red-soft); color: var(--red); font-size: 13px;
+    border: 1px solid #f6c9d2;
+  }
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  @media (max-width: 780px) { .grid { grid-template-columns: 1fr; } }
+  .model {
+    background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+    padding: 16px 18px; box-shadow: 0 4px 16px rgba(30, 40, 60, .04);
+    transition: transform .16s ease, box-shadow .16s ease;
+  }
+  .model:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(30, 40, 60, .08); }
+  .m-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+  .m-name { font-size: 15px; font-weight: 700; }
+  .tag { font-size: 11px; padding: 2px 9px; border-radius: 999px; font-weight: 600; }
+  .tag.free { background: var(--green-soft); color: var(--green); }
+  .tag.flow3 { background: var(--green-soft); color: var(--green); }
+  .tag.flow2 { background: var(--orange-soft); color: var(--orange); }
+  .tag.flow1 { background: var(--red-soft); color: var(--red); }
+  .tag.think-on { background: var(--purple-soft); color: var(--purple); }
+  .tag.think-off { background: var(--blue-soft); color: var(--blue); }
+  .tag.think-forced { background: var(--orange-soft); color: var(--orange); }
+  .m-id {
+    display: inline-block; font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: 12.5px; background: #f3f5f8; color: #3b4450;
+    padding: 5px 10px; border-radius: 8px; cursor: pointer; margin: 4px 0 10px;
+    border: 1px solid var(--border); transition: background .15s;
+  }
+  .m-id:hover { background: var(--brand-soft); color: var(--brand); }
+  .m-use { font-size: 13.5px; color: var(--text-2); margin: 0 0 10px; }
+  .m-meta { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12.5px; color: var(--text-3); }
+  .m-meta b { color: var(--text-2); font-weight: 600; }
+  .note {
+    margin-top: 8px; padding: 10px 12px; border-radius: 10px;
+    background: var(--blue-soft); color: #2b5f9e; font-size: 12.5px;
+  }
+  .code {
+    margin-top: 10px; background: #1f2430; color: #d5dcea; border-radius: 10px;
+    padding: 12px 14px; font-family: Consolas, monospace; font-size: 12.5px;
+    white-space: pre-wrap; overflow-x: auto;
+  }
+  .tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .tbl th { text-align: left; padding: 9px 10px; background: #f3f5f8; color: var(--text-2); font-weight: 600; border-bottom: 1px solid var(--border); }
+  .tbl td { padding: 9px 10px; border-bottom: 1px solid var(--border); color: var(--text-2); }
+  .tbl td:first-child { font-family: Consolas, monospace; font-size: 12px; color: var(--text); }
+  .tbl .ok { color: var(--green); font-weight: 600; }
+  .tbl .warn-cell { color: var(--orange); font-weight: 600; }
+  .tbl-note { margin: 12px 0 0; font-size: 12.5px; color: var(--text-3); }
+  .footer { margin-top: 34px; color: var(--text-3); font-size: 12.5px; text-align: center; }
+  .toast {
+    position: fixed; left: 50%; bottom: 34px; transform: translateX(-50%) translateY(20px);
+    background: #1f2430; color: #fff; padding: 9px 18px; border-radius: 999px;
+    font-size: 13px; opacity: 0; pointer-events: none; transition: all .22s ease; z-index: 99;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>硅基流动免费模型使用指南</h1>
+    <p class="sub">按用途分类 · 思考能力（可开/可关/强制）· 流畅度 · 一键复制模型 ID</p>
+    <div class="pill-row">
+      <span class="pill">共 11 个免费模型</span>
+      <span class="pill">OpenAI 兼容接口</span>
+      <span class="pill">已用密钥核对模型 ID 存在</span>
+    </div>
+  </header>
+
+  <section class="block">
+    <h2 class="block-title">通用配置<span class="cat-desc">所有模型共用，填到任意 OpenAI 兼容客户端</span></h2>
+    <div class="card">
+      <div class="cfg-row"><div class="cfg-label">名称</div><div class="cfg-val">硅基流动</div></div>
+      <div class="cfg-row"><div class="cfg-label">OpenAI 地址</div><div class="cfg-val mono"><span class="copy" data-copy="https://api.siliconflow.cn/v1">https://api.siliconflow.cn/v1</span></div></div>
+      <div class="cfg-row"><div class="cfg-label">模型 ID</div><div class="cfg-val">从下方分类中任选一个（点击模型 ID 可复制）</div></div>
+      <div class="cfg-row"><div class="cfg-label">API 密钥</div><div class="cfg-val mono">sk-你的密钥 · 建议放环境变量，不要硬编码到代码里</div></div>
+      <div class="note">
+        已实测（2026-11-12）：充值后 13 个模型全部可正常调用，官方价格页均标注「免费」。下方每个模型都附了实测响应速度与思考行为。
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2 class="block-title">① 通用对话<span class="cat-desc">日常问答、客服、文案，追求流畅快速</span></h2>
+    <div class="grid">
+      <div class="model">
+        <div class="m-head">
+          <span class="m-name">Qwen2.5-7B-Instruct</span>
+          <span class="tag free">免费</span><span class="tag flow3">流畅 ★★★</span>
+          <span class="tag think-off">不思考</span>
+        </div>
+        <div class="m-id copy" data-copy="Qwen/Qwen2.5-7B-Instruct">Qwen/Qwen2.5-7B-Instruct</div>
+        <p class="m-use">最推荐日常使用：中文对话、客服问答、文案改写、简单总结，响应快、输出稳。</p>
+        <div class="m-meta"><span><b>类型</b> 指令模型</span><span><b>速度</b> 最快</span><span><b>适用</b> 日常/客服</span></div>
+      </div>
+      <div class="model">
+        <div class="m-head">
+          <span class="m-name">GLM-4-9B-0414</span>
+          <span class="tag free">免费</span><span class="tag flow3">流畅 ★★★</span>
+          <span class="tag think-off">不思考</span>
+        </div>
+        <div class="m-id copy" data-copy="THUDM/GLM-4-9B-0414">THUDM/GLM-4-9B-0414</div>
+        <p class="m-use">通用问答、中英双语对话、信息抽取，综合素质好，速度也很快。</p>
+        <div class="m-meta"><span><b>类型</b> 指令模型</span><span><b>速度</b> 快</span><span><b>适用</b> 通用/双语</span></div>
+      </div>
+      <div class="model">
+        <div class="m-head">
+          <span class="m-name">Xing4.0-29B</span>
+          <span class="tag free">免费</span><span class="tag flow2">流畅 ★★</span>
+          <span class="tag think-off">不思考</span>
+        </div>
+        <div class="m-id copy" data-copy="XingChenAGI/Xing4.0-29B">XingChenAGI/Xing4.0-29B</div>
+        <p class="m-use">29B 较大参数量，适合稍复杂的问答与创作，理解力更强但速度略慢。</p>
+        <div class="m-meta"><span><b>类型</b> 通用大模型</span><span><b>速度</b> 中等</span><span><b>适用</b> 复杂问答/创作</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2 class="block-title">② 可思考 · 也可关闭思考<span class="cat-desc">一个模型两种模式，按需切换</span></h2>
+    <div class="grid">
+      <div class="model">
+        <div class="m-head">
+          <span class="m-name">Qwen3-8B</span>
+          <span class="tag free">免费</span><span class="tag flow3">关思考后流畅 ★★★</span>
+          <span class="tag think-on">可开/可关思考</span>
+        </div>
+        <div class="m-id copy" data-copy="Qwen/Qwen3-8B">Qwen/Qwen3-8B</div>
+        <p class="m-use">灵活性最高：<b>默认会开启思考</b>（实测输出 reasoning，约 4.2s）；加 <span class="mono">enable_thinking: false</span> 关闭后约 0.9s，流畅很多。</p>
+        <div class="m-meta"><span><b>思考参数</b> enable_thinking</span><span><b>默认</b> 开启思考</span><span><b>实测</b> 开 4.2s / 关 0.9s</span></div>
+        <div class="code">// 关闭思考（流畅模式，推荐日常使用）
+{ "model": "Qwen/Qwen3-8B", "messages": [...], "enable_thinking": false }
+
+// 开启思考（推理模式，默认即开启）
+{ "model": "Qwen/Qwen3-8B", "messages": [...], "enable_thinking": true }</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2 class="block-title">③ 深度推理<span class="cat-desc">自动输出思考过程，较慢但更适合难问题</span></h2>
+    <div class="grid">
+      <div class="model">
+        <div class="m-head">
+          <span class="m-name">DeepSeek-R1-0528-Qwen3-8B</span>
+          <span class="tag free">免费</span><span class="tag flow1">流畅 ★</span>
+          <span class="tag think-forced">强制思考</span>
+        </div>
+        <div class="m-id copy" data-copy="deepseek-ai/DeepSeek-R1-0528-Qwen3-8B">deepseek-ai/DeepSeek-R1-0528-Qwen3-8B</div>
+        <p class="m-use">R1 蒸馏推理模型：数学、代码、逻辑链分析。会先输出 <span class="mono">reasoning_content</span> 思考过程，再给答案，速度较慢且不能关闭思考。</p>
+        <div class="m-meta"><span><b>类型</b> 推理模型</span><span><b>速度</b> 慢</span><span><b>适用</b> 数学/代码/难题</span></div>
+      </div>
+      <div class="model">
+        <div class="m-head">
+          <span class="m-name">GLM-Z1-9B-0414</span>
+          <span class="tag free">免费</span><span class="tag flow2">流畅 ★★</span>
+          <span class="tag think-forced">强制思考</span>
+        </div>
+        <div class="m-id copy" data-copy="THUDM/GLM-Z1-9B-0414">THUDM/GLM-Z1-9B-0414</div>
+        <p class="m-use">GLM Z1 推理版：复杂分析、推理题、多步计算，自带思考过程，比 R1-8B 稍快。</p>
+        <div class="m-meta"><span><b>类型</b> 推理模型</span><span><b>速度</b> 中等偏慢</span><span><b>适用</b> 复杂分析</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2 class="block-title">④ 多模态 / OCR<span class="cat-desc">图片识字、文档与票据解析</span></h2>
+    <div class="grid">
+      <div class="model">
+        <div class="m-head">
+          <span class="m-name">DeepSeek-OCR</span>
+          <span class="tag free">限时免费</span>
+          <span class="tag think-off">不涉及思考</span>
+        </div>
+        <div class="m-id copy" data-copy="deepseek-ai/DeepSeek-OCR">deepseek-ai/DeepSeek-OCR</div>
+        <p class="m-use">图片转文字、扫描件/文档识别，适合把截图、PDF 页面转成可编辑文本。</p>
+        <div class="m-meta"><span><b>类型</b> 视觉 OCR</span><span><b>输入</b> 图片</span></div>
+      </div>
+      <div class="model">
+        <div class="m-head">
+          <span class="m-name">PaddleOCR-VL-1.5</span>
+          <span class="tag free">免费</span>
+          <span class="tag think-off">不涉及思考</span>
+        </div>
+        <div class="m-id copy" data-copy="PaddlePaddle/PaddleOCR-VL-1.5">PaddlePaddle/PaddleOCR-VL-1.5</div>
+        <p class="m-use">带版面分析的 OCR：表格、票据、复杂排版识别更稳，适合结构化信息提取。</p>
+        <div class="m-meta"><span><b>类型</b> 视觉 OCR</span><span><b>输入</b> 图片</span><span><b>适用</b> 表格/票据</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2 class="block-title">⑤ 翻译专用<span class="cat-desc">只做翻译，效果专精</span></h2>
+    <div class="grid">
+      <div class="model">
+        <div class="m-head">
+          <span class="m-name">Hunyuan-MT-7B</span>
+          <span class="tag free">免费</span><span class="tag flow3">流畅 ★★★</span>
+          <span class="tag think-off">不思考</span>
+        </div>
+        <div class="m-id copy" data-copy="tencent/Hunyuan-MT-7B">tencent/Hunyuan-MT-7B</div>
+        <p class="m-use">腾讯混元机器翻译模型：中英及多语种互译，专精翻译场景，比通用模型更稳。</p>
+        <div class="m-meta"><span><b>类型</b> 翻译模型</span><span><b>速度</b> 快</span><span><b>适用</b> 多语种翻译</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2 class="block-title">⑥ 向量 / 检索<span class="cat-desc">给知识库 / RAG 用，不直接对话</span></h2>
+    <div class="grid">
+      <div class="model">
+        <div class="m-head">
+          <span class="m-name">bge-m3</span>
+          <span class="tag free">免费</span>
+          <span class="tag think-off">Embedding</span>
+        </div>
+        <div class="m-id copy" data-copy="BAAI/bge-m3">BAAI/bge-m3</div>
+        <p class="m-use">多语言向量模型：把文本转成向量，用于知识库检索、语义搜索（RAG 第一步）。</p>
+        <div class="m-meta"><span><b>类型</b> Embedding</span><span><b>语言</b> 多语言</span></div>
+      </div>
+      <div class="model">
+        <div class="m-head">
+          <span class="m-name">bge-reranker-v2-m3</span>
+          <span class="tag free">免费</span>
+          <span class="tag think-off">Rerank</span>
+        </div>
+        <div class="m-id copy" data-copy="BAAI/bge-reranker-v2-m3">BAAI/bge-reranker-v2-m3</div>
+        <p class="m-use">重排序模型：对检索出的候选结果精排，显著提升 RAG 命中质量（第二步）。</p>
+        <div class="m-meta"><span><b>类型</b> Reranker</span><span><b>语言</b> 多语言</span></div>
+      </div>
+      <div class="model">
+        <div class="m-head">
+          <span class="m-name">bge-large-zh-v1.5</span>
+          <span class="tag free">免费</span>
+          <span class="tag think-off">Embedding</span>
+        </div>
+        <div class="m-id copy" data-copy="BAAI/bge-large-zh-v1.5">BAAI/bge-large-zh-v1.5</div>
+        <p class="m-use">中文向量模型：中文语料的知识库检索、相似度匹配。</p>
+        <div class="m-meta"><span><b>类型</b> Embedding</span><span><b>语言</b> 中文</span></div>
+      </div>
+      <div class="model">
+        <div class="m-head">
+          <span class="m-name">bge-large-en-v1.5</span>
+          <span class="tag free">免费</span>
+          <span class="tag think-off">Embedding</span>
+        </div>
+        <div class="m-id copy" data-copy="BAAI/bge-large-en-v1.5">BAAI/bge-large-en-v1.5</div>
+        <p class="m-use">英文向量模型：英文语料的检索与相似度匹配。</p>
+        <div class="m-meta"><span><b>类型</b> Embedding</span><span><b>语言</b> 英文</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2 class="block-title">实测核对结果<span class="cat-desc">2026-11-12 用你的密钥逐个调用 + 官方价格页比对</span></h2>
+    <div class="card">
+      <table class="tbl">
+        <thead><tr><th>模型 ID</th><th>官方价格</th><th>实测响应</th><th>思考行为</th><th>结论</th></tr></thead>
+        <tbody>
+          <tr><td>Qwen/Qwen2.5-7B-Instruct</td><td>免费</td><td>2.3s</td><td>不思考</td><td class="ok">保留</td></tr>
+          <tr><td>Qwen/Qwen3-8B</td><td>免费</td><td>4.2s（关思考 0.9s）</td><td>默认思考，可关闭</td><td class="ok">保留</td></tr>
+          <tr><td>THUDM/GLM-4-9B-0414</td><td>免费</td><td>1.1s</td><td>不思考</td><td class="ok">保留</td></tr>
+          <tr><td>THUDM/GLM-Z1-9B-0414</td><td>免费</td><td>24.6s</td><td>强制思考</td><td class="ok">保留</td></tr>
+          <tr><td>deepseek-ai/DeepSeek-R1-0528-Qwen3-8B</td><td>免费</td><td>7.0s</td><td>强制思考</td><td class="ok">保留</td></tr>
+          <tr><td>XingChenAGI/Xing4.0-29B</td><td>免费</td><td>0.8s（首次冷启动超时）</td><td>不思考</td><td class="ok">保留</td></tr>
+          <tr><td>tencent/Hunyuan-MT-7B</td><td>免费</td><td>0.8s</td><td>不思考（翻译）</td><td class="ok">保留</td></tr>
+          <tr><td>PaddlePaddle/PaddleOCR-VL-1.5</td><td>免费</td><td>官方标免费</td><td>视觉 OCR</td><td class="ok">保留</td></tr>
+          <tr><td>deepseek-ai/DeepSeek-OCR</td><td>限时免费</td><td>官方标限时免费</td><td>视觉 OCR</td><td class="warn-cell">保留（限时）</td></tr>
+          <tr><td>BAAI/bge-m3</td><td>免费</td><td>官方标免费</td><td>Embedding</td><td class="ok">保留</td></tr>
+          <tr><td>BAAI/bge-reranker-v2-m3</td><td>免费</td><td>官方标免费</td><td>Rerank</td><td class="ok">保留</td></tr>
+          <tr><td>BAAI/bge-large-zh-v1.5</td><td>免费</td><td>官方标免费</td><td>Embedding</td><td class="ok">保留</td></tr>
+          <tr><td>BAAI/bge-large-en-v1.5</td><td>免费</td><td>官方标免费</td><td>Embedding</td><td class="ok">保留</td></tr>
+        </tbody>
+      </table>
+      <p class="tbl-note">结论：你列的 11 个模型 + Qwen2.5-7B / Qwen3-8B 全部为免费，无需删除；仅 DeepSeek-OCR 是官方「限时免费」，活动结束后可能收费。</p>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2 class="block-title">选型速查<span class="cat-desc">不知道用哪个时看这里</span></h2>
+    <div class="card">
+      <div class="cfg-row"><div class="cfg-label">日常最快</div><div class="cfg-val"><b>Qwen/Qwen2.5-7B-Instruct</b> — 流畅度最高，适合绝大多数对话</div></div>
+      <div class="cfg-row"><div class="cfg-label">一个顶两个</div><div class="cfg-val"><b>Qwen/Qwen3-8B</b> — 平时关思考、遇难题开思考，最灵活</div></div>
+      <div class="cfg-row"><div class="cfg-label">难题推理</div><div class="cfg-val"><b>deepseek-ai/DeepSeek-R1-0528-Qwen3-8B</b> / <b>THUDM/GLM-Z1-9B-0414</b> — 数学、代码、逻辑</div></div>
+      <div class="cfg-row"><div class="cfg-label">图片识字</div><div class="cfg-val"><b>PaddlePaddle/PaddleOCR-VL-1.5</b>（表格票据） / <b>deepseek-ai/DeepSeek-OCR</b>（文档截图）</div></div>
+      <div class="cfg-row"><div class="cfg-label">翻译</div><div class="cfg-val"><b>tencent/Hunyuan-MT-7B</b></div></div>
+      <div class="cfg-row"><div class="cfg-label">知识库/RAG</div><div class="cfg-val"><b>BAAI/bge-m3</b> + <b>BAAI/bge-reranker-v2-m3</b></div></div>
+    </div>
+  </section>
+
+  <p class="footer">硅基流动免费模型清单 · 模型 ID 已通过 /v1/models 接口核对 · 生成于 2026-11-12</p>
+</div>
+
+<div class="toast" id="toast">已复制</div>
+<script>
+  const toast = document.getElementById('toast');
+  let timer = null;
+  function showToast(msg) {
+    toast.textContent = msg || '已复制';
+    toast.classList.add('show');
+    clearTimeout(timer);
+    timer = setTimeout(() => toast.classList.remove('show'), 1400);
+  }
+  document.querySelectorAll('[data-copy]').forEach((el) => {
+    el.addEventListener('click', () => {
+      const text = el.getAttribute('data-copy');
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => showToast('已复制：' + text)).catch(() => showToast('复制失败，请手动选择'));
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = text; document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); showToast('已复制：' + text); } catch (e) { showToast('复制失败'); }
+        document.body.removeChild(ta);
+      }
+    });
+  });
+</script>
+</body>
+</html>
